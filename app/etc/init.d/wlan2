@@ -1,0 +1,181 @@
+#!/bin/sh
+#
+# Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are
+# met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above
+#       copyright notice, this list of conditions and the following
+#       disclaimer in the documentation and/or other materials provided
+#       with the distribution.
+#     * Neither the name of The Linux Foundation nor the names of its
+#       contributors may be used to endorse or promote products derived
+#       from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
+# WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+# BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+# BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+export KERNEL=`uname -r`
+export MODULE_BASE=/lib/modules/$KERNEL/updates
+export RETRY_LIMIT=5
+export ENUM_RETRY_LIMIT=1
+HELP="Usage $0 {start | stop | restart} [<ssid> <passphrase>] [<ssid> <passphrase>]"
+CONF_FILE="/etc/wlan_config"
+DEVICE_PATTERN="device=AR6003"
+CHIP="AR6004"
+SDIO_POLLING_PATH="/sys/devices/msm_sdcc.3/polling"
+INTERFACE_NAME="wlan"
+MODE="sta,ap"
+
+#Default configuration files available
+HOSTAPD_CONF="/etc/wlan2/hostapd.conf"
+WPA_SUPPLICANT_CONF="/etc/wlan2/wpa_supplicant.conf"
+
+AR6004_DEVID="0cf3:9374"
+
+SSID=$2
+PASSWD=$3
+
+kernel(){
+    if [ -w $SDIO_POLLING_PATH ]; then
+        echo 1 > $SDIO_POLLING_PATH
+    else
+        echo "Cannot write to $SDIO_POLLING_PATH"
+        exit 1
+    fi
+
+    /sbin/modprobe ar6000 targetconf="router" devmode=$MODE ifname=$INTERFACE_NAME 
+    if [ $? -gt 0 ];then
+        echo "Error to modprobe ar6000"
+        exit 1
+    fi
+
+    sleep 3
+
+    /sbin/ifconfig wlan0 up
+    /sbin/ifconfig wlan1 up
+
+    sleep 1
+
+    echo 0 > $SDIO_POLLING_PATH
+}
+
+kernel_off(){
+    killall -15 cxmapp hostapd dhcprelay wpa_supplicant udhcpc
+    echo 0 > $SDIO_POLLING_PATH
+    /sbin/rmmod ar6000
+}
+
+connect_sta() {
+    file_wpa $SSID $PASSWD $1
+    /usr/sbin/wpa_supplicant -B -Dar6003 -iwlan0 -c$WPA_SUPPLICANT_CONF
+    /sbin/udhcpc -n -i wlan0 -s /etc/udhcpc.d/50default
+}
+
+file_wpa() {
+    if [ "$3" == "wep" ]; then
+        cat <<EOF > $WPA_SUPPLICANT_CONF
+network={
+    ssid="$1"
+    key_mgmt=NONE
+    wep_key0="$2"  # or 13 characters, or a hexkey starting with 0x
+    wep_tx_keyidx=0
+}
+EOF
+    else
+        /usr/sbin/wpa_passphrase $SSID $PASSWD > $WPA_SUPPLICANT_CONF
+    fi
+}
+
+file_hostapd() {
+    cat <<EOF > $HOSTAPD_CONF
+interface=wlan1
+bridge=bridge0
+driver=ar6000
+ctrl_interface=/var/run/hostapd
+
+logger_syslog=-1
+logger_syslog_level=0
+
+ssid=$1
+channel_num=1
+ignore_broadcast_ssid=0
+max_num_sta=5
+
+wpa=2
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=CCMP
+wpa_passphrase=$2
+EOF
+}
+
+if [ -r $CONF_FILE ]; then
+    grep -iq $DEVICE_PATTERN $CONF_FILE
+    ret=$?
+    if [ $ret -eq 0 ]; then
+        CHIP="AR6003"
+    else
+        CHIP="AR6004"
+    fi
+fi
+
+echo "$CHIP chip detected!"
+
+if [ $CHIP == "AR6003" ]; then
+    case "$1" in
+    start)
+        echo "Starting WLAN..."
+        kernel
+        connect_sta "wep"
+        if [ $? -gt 0 ];then
+            kernel_off
+            kernel
+            connect_sta "wpa"
+        fi
+        
+        ping -q -c 1 -W 1 1.1.1.1
+        if [ $? -gt 0 ];then
+            /sbin/udhcpc -n -i rmnet0 -s /etc/udhcpc.d/50default
+        fi
+
+        #echo "Starting hostap..."
+        #file_hostapd $SSID $PASS
+        #/usr/bin/hostapd -B $HOSTAPD_CONF
+        #/sbin/dhcprelay wlan1 bridge0 &
+        ;;
+
+    stop)
+        echo "Stopping WLAN..."
+        kernel_off
+        ;;
+
+    restart)
+        $0 stop
+        shift
+        $0 start $@
+
+        if [ $? -ne 0 ]; then
+            return 1
+        fi
+        ;;
+
+    *)
+        echo $HELP >&2
+        exit 1
+        ;;
+    esac
+fi
+
+exit 0

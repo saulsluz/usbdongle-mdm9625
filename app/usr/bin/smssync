@@ -1,0 +1,70 @@
+#!/bin/sh
+
+json_value(){
+    TMP=$(cat $2 | sed 's/\\\\\//\//g' | sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | sed 's/\"//g' | grep -w $1)
+    echo ${TMP##*|}
+}
+
+login(){
+
+    wget --post-data "type=login&pwd=$PASSWD&timeout=0&user=$USER" -q \
+    "http://$SERVER/cgi-bin/qcmap_auth" -O "qcmap_auth.json"
+    #TOKEN=$(jq .token qcmap_auth.json | tr -d \")
+    TOKEN=$(json_value 'token' 'qcmap_auth.json')
+    echo "Token received $TOKEN"
+
+}
+
+logout(){
+    wget --post-data 'type=close&timeout=0' -q \
+    "http://$SERVER/cgi-bin/qcmap_auth" -O "qcmap_auth.json"
+    #echo $(cat qcmap_auth.json) | jq
+}
+
+send_one_sms(){
+
+    wget --post-data "Page=sms_send&msgFlag=0&msgLength=6&msgNumber=8300&token=$TOKEN&msgContent=Numero" -q \
+    "http://$SERVER/cgi-bin/qcmap_web_cgi" -O "qcmap_web_cgi.json"
+    #SEND_SMS=$(jq .result qcmap_web_cgi.json)
+    SEND_SMS=$(json_value 'result' 'qcmap_web_cgi.json')
+    echo "Send SMS result $SEND_SMS"
+
+}
+
+get_all_sms(){
+    wget --post-data "Page=sms_read&storage=1&box_flag=0&token=$TOKEN" -q \
+    "http://$SERVER/cgi-bin/qcmap_web_cgi" -O "qcmap_web_cgi.json"
+    #echo $(cat qcmap_web_cgi.json) | jq
+}
+
+get_count_sms(){
+    get_all_sms
+    #COUNT=$(jq .count qcmap_web_cgi.json)
+    COUNT=$(json_value 'count' 'qcmap_web_cgi.json')
+    echo "Count is " $COUNT
+}
+
+cleanup(){
+    rm -f qcmap*
+}
+
+## BEGIN
+
+if [ ! -z $1 ]
+then
+    SERVER=$1
+    USER="admin"
+    PASSWD="vivo"
+
+    echo "Trying on server " $1
+
+    login
+    get_all_sms
+    get_count_sms
+    logout
+    cleanup
+
+else
+    echo "Usage: $0 SERVER_IP"
+    exit 1
+fi
