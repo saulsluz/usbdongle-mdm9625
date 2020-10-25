@@ -3,6 +3,8 @@
 ### Whata?
 Small piece of implementations to explore more possibilities and features that are available at MDM9625 dongle
 
+If you have one, please help me to turn this small dongle into big bazooka :smile:
+
 ### What it can do
 Until now It's possible to turn this device in a little Wifi Repeater or just a SSH jumper over Wifi/GSM. It's possible to read  SMS messages in JSON format too.
 
