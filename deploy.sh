@@ -23,8 +23,8 @@ reinstall_services(){
 
 restart_services(){
     echo "Batching Restart services"
-    add_cmd "/etc/init.d/busybox-cron restart"
     add_cmd "/etc/init.d/wlan2 restart $1 $2 $3 $4"
+    add_cmd "/etc/init.d/busybox-cron restart"
 }
 
 add_cmd(){
