@@ -42,19 +42,22 @@ usage(){
     exit 1
 }
 
-if [ ! -z $1 ] && [ ! -z $2 ] && [ ! -z $3 ]; then
-    if [ ! -z $4 ] && [ -z $5 ]; then
-        usage
-    else
-        SERVER=$1
+echo "Args: $# $@"
 
-        send_files
-        remove_services
-        reinstall_services
-        restart_services $2 $3 $4 $5
-        
-        ssh -o "KexAlgorithms=diffie-hellman-group1-sha1" root@$SERVER true "$CMD"
+if [ $# -gt 2 ]; then
+    
+    if [ $# -eq 4 ]; then
+        usage
     fi
+
+    SERVER=$1
+
+    send_files
+    remove_services
+    reinstall_services
+    restart_services $2 $3 $4 $5
+    
+    ssh -o "KexAlgorithms=diffie-hellman-group1-sha1" root@$SERVER true "$CMD"
 else
     usage
 fi
