@@ -138,15 +138,22 @@ if [ $CHIP == "AR6003" ]; then
     start)
         echo "Starting WLAN..."
         kernel
+        echo "Starting Wifi connection..."
         connect_sta "wep"
-        if [ $? -gt 0 ];then
+        if [ $? -eq 0 ];then
+            echo "WEP auth fail"
+
             kernel_off
             kernel
             connect_sta "wpa"
+            if [ $? -eq 0 ];then
+                echo "WPA auth fail"
+            fi
         fi
         
         ping -q -c 1 -W 1 1.1.1.1
         if [ $? -gt 0 ];then
+            echo "No internet. Setting rmnet0 default"
             /sbin/udhcpc -n -i rmnet0 -s /etc/udhcpc.d/50default
         fi
 
