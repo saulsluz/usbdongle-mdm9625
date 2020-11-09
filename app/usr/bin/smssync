@@ -54,7 +54,7 @@ if [ ! -z $1 ]
 then
     SERVER=$1
     USER="admin"
-    PASSWD="vivo"
+    PASSWD=""
 
     echo "Trying on server " $1
 

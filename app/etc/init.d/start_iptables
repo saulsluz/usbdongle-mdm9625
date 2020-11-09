@@ -26,89 +26,47 @@
 # WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# iptables.   init.d script to start the Data Software's iptables. daemon
 
 export PATH='/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin'
 
-CONF_FILE="/etc/wlan_config"
-SDIO_POLLING_PATH="/sys/devices/msm_sdcc.3/polling"
-
-HOSTAPD_CONF="/etc/wlan2/hostapd.conf"
-WPA_SUPPLICANT_CONF="/etc/wlan2/wpa_supplicant.conf"
+DIR="/etc/iptables"
+FILE="rules.conf"
 
 set -e
 
-if [ -r $CONF_FILE ]; then
+rules(){
+    iptables -P INPUT DROP
+    iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A INPUT -i lo
+    iptables -A INPUT -i rndis0
+    iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+    iptables -I INPUT 5 -m limit --limit 5/min -j LOG --log-prefix "iptables denied: " --log-level 7
+}
 
-    grep -iq "device=AR6003" $CONF_FILE
-    if [ $? -ne 0 ]; then
-        echo "AR6003 chip NOT detected!"
-        exit 1
-    fi
-
-    case "$1" in
-    start)
-        
-        if [ -w $SDIO_POLLING_PATH ]; then
-            echo 1 > $SDIO_POLLING_PATH
-        else
-            echo "Cannot write to $SDIO_POLLING_PATH"
-            exit 1
-        fi
-
-        modprobe ar6000 targetconf="router" devmode="sta,ap" ifname="wlan" 
-        if [ $? -ne 0 ];then
-            echo "Error to modprobe ar6000"
-            exit 1
-        fi
-
-        sleep 3
-        ifconfig wlan0 up
-        ifconfig wlan1 up
-        sleep 1
-
-        echo 0 > $SDIO_POLLING_PATH
-        
-
-        wpa_supplicant -B -Dar6003 -iwlan0 -c$WPA_SUPPLICANT_CONF
-        udhcpc -n -i wlan0 -s /etc/udhcpc.d/50default
-        
-        if [ $? -ne 0 ];then
-            echo "Error wifi auth fail"
-            exit 1
-        fi
-        
-        ping -q -c 1 -W 1 1.1.1.1
-        if [ $? -ne 0 ];then
-            echo "No internet. Setting rmnet0 default"
-            udhcpc -n -i rmnet0 -s /etc/udhcpc.d/50default
-        fi
-
-        echo "Starting hostap..."
-        hostapd -B $HOSTAPD_CONF
+case "$1" in
+  start)
+        echo -n "Applying iptables rules "
+        mkdir -p "$DIR"
+        iptables-save > "$DIR/$FILE"
+        rules
+        echo "done"
         ;;
-
-    stop)
-        echo "Stopping WLAN..."
-        killall -15 cxmapp hostapd dhcprelay wpa_supplicant udhcpc 2>/dev/null
-        echo 0 > $SDIO_POLLING_PATH
-        rmmod ar6000
+  stop)
+        echo -n "Restoring iptables rules "
+        if [ -e "$DIR/$FILE" ];then
+            iptables-restore "$DIR/$FILE"
+        fi
+        echo "done"
         ;;
-
-    restart)
+  restart)
         $0 stop
-        shift
-        $0 start $@
-
-        if [ $? -ne 0 ]; then
-            return 1
-        fi
+        $0 start
         ;;
-
-    *)
-        echo "Usage $0 {start | stop | restart}" >&2
+  *)
+        echo "Usage start_iptables { start | stop | restart}" >&2
         exit 1
         ;;
-    esac
-fi
+esac
 
-exit 0
+exit

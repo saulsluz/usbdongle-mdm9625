@@ -1,2 +1,0 @@
-0 */1 * * * /etc/init.d/reboot restart
-* * * * * wget -O /dev/null --post-data "text=$(ip a | grep -i rmnet0 | grep inet) $(date)" "http://dontpad.com/usbdongle-$(cat /etc/hostname)" && logger Logged Public IP
