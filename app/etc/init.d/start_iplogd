@@ -41,14 +41,17 @@ case "$1" in
         echo $$ > $PID
         while [ true ];do
             ROUTEIF=$(ip route | grep default | cut -d " " -f 5)
-            TEXT="$(ip a | grep -i $ROUTEIF | grep inet) $(date)"
-            wget -q -O /dev/null --post-data "text=$TEXT" "http://dontpad.com/usbdongle-$(cat /etc/hostname)"
+            TEXT="$(ip a | grep -i "$ROUTEIF" | grep inet) $(date)"
+            wget -q -O /dev/null --post-data "text=$TEXT" "http://dontpad.com/usbdongle-$(cat /etc/hostname)" &
+            logger -t "iplogd[$$]" "Is going to sleep for $INTERVAL seconds..."
             sleep $INTERVAL
         done
         ;;
   stop)
         echo -n "Stopping iptables rules "
-        kill $(cat $PID)
+        if [ -e "$PID" ];then
+            kill $(cat $PID)
+        fi
         echo "done"
         ;;
   restart)
