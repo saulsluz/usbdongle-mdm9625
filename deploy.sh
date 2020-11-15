@@ -73,7 +73,7 @@ if [ $# -gt 2 ]; then
         APPASSWD="$5"
     fi
 
-    cat <<EOF > app/etc/wlan2/wpa_supplicant.conf
+    cat <<EOF > app/etc/wlan2/hostapd.conf
 ##### Interface & driver configuration #####################
 interface=wlan1
 #Commenting the bridge interface for now
