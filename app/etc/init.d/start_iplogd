@@ -33,7 +33,7 @@ export PATH='/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin'
 PID="/var/run/iplogd.pid"
 INTERVAL=60 #seconds
 
-set -e
+#set -e
 
 case "$1" in
   start)
@@ -42,7 +42,7 @@ case "$1" in
         while [ true ];do
             ROUTEIF=$(ip route | grep default | cut -d " " -f 5)
             TEXT="$(ip a | grep -i "$ROUTEIF" | grep inet) $(date)"
-            wget -q -O /dev/null --post-data "text=$TEXT" "http://dontpad.com/usbdongle-$(cat /etc/hostname)" &
+            wget -q -O /dev/null --post-data "text=$TEXT" "http://dontpad.com/usbdongle-$(cat /etc/hostname)"
             logger -t "iplogd[$$]" "Is going to sleep for $INTERVAL seconds..."
             sleep $INTERVAL
         done
