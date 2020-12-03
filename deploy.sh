@@ -34,9 +34,9 @@ send_files(){
 
 install_services(){
     echo "Batching install services"
-    add_cmd "/usr/sbin/update-rc.d start_iptables defaults 90 40"
-    add_cmd "/usr/sbin/update-rc.d wlan2 defaults 90 40"
-    add_cmd "/usr/sbin/update-rc.d start_iplogd defaults 90 40"
+    add_cmd "/usr/sbin/update-rc.d start_iptables defaults 90 30"
+    add_cmd "/usr/sbin/update-rc.d wlan2 defaults 101 30"
+    #add_cmd "/usr/sbin/update-rc.d start_iplogd defaults 90 30"
 }
 
 add_cmd(){
@@ -65,6 +65,13 @@ if [ $# -gt 2 ]; then
     SERVER=$1
 
     wpa_passphrase "$2" "$3" > app/etc/wlan2/wpa_supplicant.conf
+
+    echo "network={
+    ssid=\"$2\"
+    key_mgmt=NONE
+    wep_key0=\"$3\"
+}" > app/etc/wlan2/wpa_supplicant_wep.conf
+
 
     APSSID="$2"
     APPASSWD="$3"
@@ -99,14 +106,12 @@ EOF
 
     send_files
     install_services
+
+    add_cmd "cat /etc/mobileap_cfg.xml | grep -i \"192.168\""
     
     #ssh -o "KexAlgorithms=diffie-hellman-group1-sha1" root@$SERVER "true $CMD && /sbin/reboot"
     ssh -o "KexAlgorithms=diffie-hellman-group1-sha1" root@$SERVER "true $CMD"
-    if [ $? -gt 0 ];then
-        #echo "IP: 192.168.2.1"
-        #echo "DHCP: 192.168.2.20-40"
-        echo "Deploy done"
-    fi
+    echo "Deploy done"
 else
     usage
 fi

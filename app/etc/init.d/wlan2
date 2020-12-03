@@ -34,8 +34,22 @@ SDIO_POLLING_PATH="/sys/devices/msm_sdcc.3/polling"
 
 HOSTAPD_CONF="/etc/wlan2/hostapd.conf"
 WPA_SUPPLICANT_CONF="/etc/wlan2/wpa_supplicant.conf"
+WPA_SUPPLICANT_WEP_CONF="/etc/wlan2/wpa_supplicant_wep.conf"
 
 #set -e
+
+connect(){
+    echo "Configuration file: $@"
+    wpa_supplicant -B -Dwext -iwlan0 -c$1 1>/dev/null 2>/dev/null
+    udhcpc -n -i wlan0 -s /etc/udhcpc.d/50default 1>/dev/null 2>/dev/null
+    if [ $? -ne 0 ];then
+        echo "Error wifi auth fail"
+        killall wpa_supplicant
+        return 1
+    else
+        iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE --random
+    fi
+}
 
 if [ -r $CONF_FILE ]; then
 
@@ -56,42 +70,47 @@ if [ -r $CONF_FILE ]; then
             exit 1
         fi
 
-        modprobe ar6000 targetconf="router" devmode="sta,ap" ifname="wlan" 
+        modprobe ar6000 targetconf="router" devmode="sta,ap" ifname="wlan"
         if [ $? -ne 0 ];then
             echo "Error to modprobe ar6000"
             exit 1
         fi
-
         sleep 3
+
         ifconfig wlan0 up
         ifconfig wlan1 up
-        sleep 1
 
         echo 0 > $SDIO_POLLING_PATH
-        
 
-        wpa_supplicant -B -Dar6003 -iwlan0 -c$WPA_SUPPLICANT_CONF
-        #udhcpc -n -i wlan0 -s /etc/udhcpc.d/50default
-        #if [ $? -ne 0 ];then
-        #    echo "Error wifi auth fail"
-        #    exit 1
-        #fi
-        
-        ping -q -c 1 -W 1 1.1.1.1
+        connect $WPA_SUPPLICANT_WEP_CONF
         if [ $? -ne 0 ];then
-            echo "No internet. Setting rmnet0 default"
-            udhcpc -n -i rmnet0 -s /etc/udhcpc.d/50default
+            connect $WPA_SUPPLICANT_CONF
         fi
 
-        echo "Starting hostap..."
-        hostapd -B $HOSTAPD_CONF
+        ping -c 1 -W 3 1.1.1.1 1>/dev/null 2>/dev/null
+        if [ $? -ne 0 ];then
+            echo "No internet. Setting rmnet0 default..."
+            udhcpc -n -i rmnet0 -s /etc/udhcpc.d/50default 1>/dev/null 2>/dev/null
+            if [ $? -ne 0 ];then
+                echo "Error on set rmnet0 as default"
+            fi
+        fi
+
+        #echo "Starting hostap..."
+        #hostapd -B $HOSTAPD_CONF
         ;;
 
     stop)
         echo "Stopping WLAN..."
-        killall -15 cxmapp hostapd dhcprelay wpa_supplicant udhcpc QCMAP_ConnectionManager 2>/dev/null &
+        killall -15 cxmapp hostapd dhcprelay wpa_supplicant udhcpc QCMAP_ConnectionManager 2>/dev/null
+        iptables -t nat -F POSTROUTING
         echo 0 > $SDIO_POLLING_PATH
+        
+        ifconfig wlan0 down 1>/dev/null 2>/dev/null
+        ifconfig wlan1 down 1>/dev/null 2>/dev/null
+
         rmmod ar6000
+        sleep 3
         ;;
 
     restart)
